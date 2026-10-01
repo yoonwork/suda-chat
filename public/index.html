@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>수다방</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&family=Noto+Sans+KR:wght@400;500;700&display=swap">
+<style>
+/* Layout: conversation list on the left, open thread on the right; on phones they swap places. */
+:root {
+  --bg: #eef2f6;
+  --surface: #ffffff;
+  --ink: #16212b;
+  --muted: #6b7a88;
+  --line: #d9e0e7;
+  --accent: #0e7c86;
+  --accent-ink: #ffffff;
+  --mine: #0e7c86;
+  --mine-ink: #ffffff;
+  --danger: #c2392f;
+  --ok: #2fb36a;
+  --shade: rgba(22, 33, 43, 0.72);
+  --font-display: "Jua", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-body: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1418; --surface: #182027; --ink: #e8eef3; --muted: #8fa0ae; --line: #27323b;
+    --accent: #37b8c2; --accent-ink: #06262a; --mine: #1d8f99; --mine-ink: #ffffff;
+    --danger: #ff7a70; --ok: #46c57c; --shade: rgba(0, 0, 0, 0.82);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1418; --surface: #182027; --ink: #e8eef3; --muted: #8fa0ae; --line: #27323b;
+  --accent: #37b8c2; --accent-ink: #06262a; --mine: #1d8f99; --mine-ink: #ffffff;
+  --danger: #ff7a70; --ok: #46c57c; --shade: rgba(0, 0, 0, 0.82);
+  color-scheme: dark;
+}
+
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5; overflow: hidden; }
+* { box-sizing: border-box; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.shell {
+  height: 100%; max-width: 980px; margin: 0 auto; padding-inline: 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr); column-gap: 16px;
+}
+.side, .main { min-height: 0; min-width: 0; display: flex; flex-direction: column; position: relative; }
+.shell[data-view="list"] .main { display: none; }
+.shell[data-view="chat"] .side { display: none; }
+@media (min-width: 760px) {
+  .shell { grid-template-columns: 300px minmax(0, 1fr); }
+  .shell[data-view] .side, .shell[data-view] .main { display: flex; }
+  .side { border-right: 1px solid var(--line); padding-right: 16px; }
+  .back { display: none !important; }
+}
+
+/* side */
+.head { display: flex; align-items: center; gap: 10px; padding-block: 14px 12px; }
+.head .titles { flex: 1; min-width: 0; }
+.head h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 26px; line-height: 1.1; }
+.sub { margin: 2px 0 0; font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sub span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+.dot.on { background: var(--ok); }
+.pill-btn { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font-size: 12.5px; color: var(--muted); cursor: pointer; }
+.pill-btn.armed { color: var(--danger); border-color: var(--danger); font-weight: 700; }
+.pill-btn:disabled { opacity: 0.5; cursor: progress; }
+
+.find { margin-bottom: 8px; }
+.find input { width: 100%; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 21px; padding: 9px 15px; height: 42px; }
+.find input::placeholder { color: var(--muted); }
+.find-hint { margin: 6px 4px 0; font-size: 12px; color: var(--muted); }
+.threads { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; padding-bottom: 12px; overscroll-behavior: contain; }
+.sec { margin: 10px 6px 4px; font-size: 12px; color: var(--muted); letter-spacing: 0.04em; }
+.thread { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: 14px; padding: 9px 10px; cursor: pointer; }
+.thread:hover { background: var(--surface); }
+.thread[aria-current="true"] { background: var(--surface); border-color: var(--line); }
+.t-body { flex: 1; min-width: 0; }
+.t-name { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-prev { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t-end { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.t-time { font-size: 11px; color: var(--muted); }
+.badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+
+.avatar { width: 38px; height: 38px; border-radius: 50%; flex: none; background: var(--line); object-fit: cover; display: block; }
+.avatar.group { display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); }
+.avatar.group svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.avatar.sm { width: 32px; height: 32px; }
+
+/* main */
+.top { display: flex; align-items: center; gap: 10px; padding-block: 12px; border-bottom: 1px solid var(--line); }
+.back { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; }
+.back svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.top .who-top { flex: 1; min-width: 0; }
+.top h2 { margin: 0; font-size: 16px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route { margin: 0; font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.route b { color: var(--ink); font-weight: 500; }
+
+.list { flex: 1; min-height: 0; overflow-y: auto; padding-block: 14px; display: flex; flex-direction: column; gap: 3px; overscroll-behavior: contain; }
+.empty { margin: auto; text-align: center; color: var(--muted); max-width: 28ch; }
+.empty strong { display: block; font-family: var(--font-display); font-weight: 400; font-size: 22px; color: var(--ink); margin-bottom: 4px; }
+.day { align-self: center; margin: 12px 0 8px; font-size: 12px; color: var(--muted); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 12px; }
+.row { display: flex; align-items: flex-end; gap: 8px; max-width: 100%; }
+.row.mine { flex-direction: row-reverse; }
+.row.gap-top { margin-top: 10px; }
+.avatar-slot { width: 32px; flex: none; align-self: flex-start; }
+.row .avatar.sm { cursor: pointer; align-self: flex-start; }
+.col { display: flex; flex-direction: column; min-width: 0; max-width: min(78%, 480px); }
+.row.mine .col { align-items: flex-end; }
+.who { font-size: 12.5px; color: var(--muted); margin: 0 4px 3px; }
+.who.tap { cursor: pointer; }
+.bubble-line { display: flex; align-items: flex-end; gap: 6px; min-width: 0; }
+.row.mine .bubble-line { flex-direction: row-reverse; }
+.bubble { background: var(--surface); border: 1px solid var(--line); border-radius: 18px 18px 18px 6px; padding: 8px 13px; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.row.mine .bubble { background: var(--mine); border-color: transparent; color: var(--mine-ink); border-radius: 18px 18px 6px 18px; }
+.bubble.photo { padding: 4px; }
+.bubble.photo .cap { padding: 6px 9px 4px; }
+.bubble img.pic { display: block; max-width: 100%; height: auto; border-radius: 14px; cursor: zoom-in; background: var(--line); }
+.meta { display: flex; flex-direction: column; align-items: flex-start; font-size: 11px; color: var(--muted); flex: none; line-height: 1.3; padding-bottom: 2px; }
+.row.mine .meta { align-items: flex-end; }
+.del { background: none; border: 0; padding: 0; font-size: 11px; color: var(--muted); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.del.armed { color: var(--danger); font-weight: 700; }
+
+.jump { position: absolute; left: 50%; transform: translateX(-50%); bottom: 88px; background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22); }
+
+.composer { padding-block: 10px 12px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.stage { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 6px 10px 6px 6px; }
+.stage img { width: 52px; height: 52px; border-radius: 9px; object-fit: cover; background: var(--line); }
+.stage .info { flex: 1; min-width: 0; font-size: 12.5px; color: var(--muted); }
+.stage .info b { color: var(--ink); font-weight: 500; }
+.stage button { background: none; border: 0; padding: 6px 8px; color: var(--muted); cursor: pointer; font-size: 13px; }
+.bar { display: flex; align-items: flex-end; gap: 8px; }
+.icon-btn, .send { width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface); display: grid; place-items: center; cursor: pointer; flex: none; color: var(--ink); }
+.send { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.send:disabled, .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.icon-btn svg, .send svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+textarea { flex: 1; min-width: 0; resize: none; font: inherit; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 21px; padding: 9px 15px; line-height: 1.45; max-height: 140px; height: 42px; }
+textarea::placeholder { color: var(--muted); }
+textarea:disabled { opacity: 0.6; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+
+.lightbox { position: fixed; inset: 0; background: var(--shade); display: grid; place-items: center; padding: 16px; z-index: 20; cursor: zoom-out; }
+.lightbox img { max-width: 100%; max-height: 100%; border-radius: 10px; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: 96px; background: var(--ink); color: var(--bg); padding: 8px 16px; border-radius: 999px; font-size: 13px; z-index: 30; max-width: calc(100% - 32px); text-align: center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .row { animation: pop 0.18s ease-out; }
+  @keyframes pop { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+}
+
+body { margin: 0; padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+.join { position: fixed; inset: 0; z-index: 40; background: var(--bg); display: grid; place-items: center; padding: 16px; overflow-y: auto; }
+.join-card { width: min(100%, 380px); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+.join-card h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 32px; line-height: 1.1; }
+.join-card p { margin: 0 0 8px; color: var(--muted); }
+.join-card label { font-size: 13px; font-weight: 500; margin-top: 6px; }
+.join-card input { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; height: 44px; }
+.join-card .err { color: var(--danger); font-size: 13px; margin: 4px 0 0; }
+.primary { margin-top: 12px; height: 46px; border: 0; border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-weight: 700; cursor: pointer; }
+.primary:disabled { opacity: 0.5; cursor: wait; }
+</style>
+</head>
+<body>
+<div class="shell" id="shell" data-view="list">
+  <aside class="side">
+    <header class="head">
+      <div class="titles">
+        <h1>수다방</h1>
+        <p class="sub"><span class="dot" id="dot"></span><span id="status">연결하는 중…</span></p>
+      </div>
+      <button class="pill-btn" id="clearAll" type="button" hidden>전체 삭제</button>
+    </header>
+    <nav class="threads" id="threads" aria-label="대화 목록"></nav>
+  </aside>
+
+  <section class="main">
+    <header class="top">
+      <button class="back" id="back" type="button" aria-label="대화 목록으로">
+        <svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <span id="topAvatar"></span>
+      <div class="who-top">
+        <h2 id="topTitle"></h2>
+        <p class="route" id="route"></p>
+      </div>
+      <button class="pill-btn" id="clearMine" type="button">내 메시지 지우기</button>
+    </header>
+
+    <div class="list" id="list" aria-live="polite" aria-label="대화 내용"></div>
+    <button class="jump" id="jump" hidden type="button">새 메시지 ↓</button>
+
+    <footer class="composer">
+      <div class="stage" id="stage" hidden>
+        <img id="stageImg" alt="보낼 사진 미리보기">
+        <div class="info" id="stageInfo"></div>
+        <button type="button" id="stageRemove">빼기</button>
+      </div>
+      <div class="bar">
+        <input type="file" id="file" accept="image/*" hidden>
+        <button class="icon-btn" id="attach" type="button" aria-label="사진 고르기" title="사진 보내기">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="10" r="1.8"/><path d="M4 18l5.2-5.2a1.6 1.6 0 0 1 2.3 0L17 18.5M14.5 15.5l1.3-1.3a1.6 1.6 0 0 1 2.3 0L21 17"/></svg>
+        </button>
+        <textarea id="input" rows="1" maxlength="1000" aria-label="메시지 입력"></textarea>
+        <button class="send" id="send" type="button" aria-label="보내기">
+          <svg viewBox="0 0 24 24"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+    </footer>
+  </section>
+</div>
+
+<div class="join" id="join" hidden>
+  <form class="join-card" id="joinForm">
+    <h1>수다방</h1>
+    <p>이름만 정하면 바로 들어와요. 가입이나 로그인은 필요 없어요.</p>
+    <label for="name">이름</label>
+    <input id="name" maxlength="20" autocomplete="nickname" required>
+    <div id="codeWrap" hidden>
+      <label for="code">초대 코드</label>
+      <input id="code" autocomplete="off">
+    </div>
+    <p class="err" id="joinErr" hidden></p>
+    <button class="primary" id="joinBtn" type="submit">입장하기</button>
+  </form>
+</div>
+
+<div class="lightbox" id="lightbox" hidden><img id="lightImg" alt="확대한 사진"></div>
+<div class="toast" id="toast" hidden role="status"></div>
+
+<script>
+(function () {
+  var $ = function (s) { return document.querySelector(s); };
+  var shell = $('#shell'), listEl = $('#list'), threadsEl = $('#threads'), inputEl = $('#input'), sendBtn = $('#send'), attachBtn = $('#attach');
+  var fileEl = $('#file'), stageEl = $('#stage'), stageImg = $('#stageImg'), stageInfo = $('#stageInfo');
+  var jumpEl = $('#jump'), statusEl = $('#status'), dotEl = $('#dot');
+  var lightEl = $('#lightbox'), lightImg = $('#lightImg'), toastEl = $('#toast');
+  var clearAllBtn = $('#clearAll'), clearMineBtn = $('#clearMine');
+  var topAvatar = $('#topAvatar'), topTitle = $('#topTitle'), routeEl = $('#route');
+  var joinEl = $('#join'), joinForm = $('#joinForm'), nameEl = $('#name'), codeEl = $('#code'), codeWrap = $('#codeWrap'), joinErr = $('#joinErr'), joinBtn = $('#joinBtn');
+  var wide = window.matchMedia('(min-width: 760px)');
+
+  var me = null, users = [], msgs = [], profs = {}, pending = [], threads = [], cur = 'all';
+  var staged = null, seen = {}, adminKey = '', needsCode = false, es = null, everOpened = false;
+  var renderSeq = 0, lastKey = '', forceBottom = false, armedId = null, armTimer = null, toastTimer = null;
+  var clearArmed = false, clearTimer = null, mineArmed = false, mineTimer = null;
+
+  var timeFmt = new Intl.DateTimeFormat('ko-KR', { hour: 'numeric', minute: '2-digit', hour12: true });
+  var shortFmt = new Intl.DateTimeFormat('ko-KR', { month: 'numeric', day: 'numeric' });
+  var dayFmt = new Intl.DateTimeFormat('ko-KR', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' });
+  var GROUP_SVG = '<svg viewBox="0 0 24 24"><circle cx="9" cy="9" r="3.2"/><circle cx="17" cy="10" r="2.6"/><path d="M3.5 19c.6-3 2.8-4.6 5.5-4.6s4.9 1.6 5.5 4.6M15 15.2c2.6-.3 4.8.9 5.5 3.8"/></svg>';
+  var COLORS = ['#b4506f', '#4f6fb4', '#3f8f6b', '#a2702f', '#7b5ab4', '#2f8f9b', '#b4584a', '#6b7a88'];
+
+  function ls(k, v) {
+    try { if (v === undefined) return localStorage.getItem(k) || ''; if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {}
+    return '';
+  }
+  try { seen = JSON.parse(ls('suda-seen') || '{}') || {}; } catch (e) { seen = {}; }
+  function saveSeen() { ls('suda-seen', JSON.stringify(seen)); }
+
+  function toast(t) { toastEl.textContent = t; toastEl.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(function () { toastEl.hidden = true; }, 3200); }
+  function setStatus(text, on) { statusEl.textContent = text; dotEl.className = 'dot' + (on ? ' on' : ''); }
+  function dayKey(ts) { var d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+  function nearBottom() { return listEl.scrollHeight - listEl.scrollTop - listEl.clientHeight < 90; }
+  function toBottom() { listEl.scrollTop = listEl.scrollHeight; jumpEl.hidden = true; }
+  function hash(s) { var h = 0; for (var i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+  function avatarData(name, id) {
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="' + COLORS[hash(id) % COLORS.length] + '"/><text x="32" y="43" text-anchor="middle" font-size="30" font-family="sans-serif" fill="#fff">' + (name ? name.charAt(0) : '?').replace(/[<>&"]/g, '') + '</text></svg>';
+    return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  }
+  function nameOf(uid) {
+    if (uid === 'all') return '전체방';
+    var p = profs[uid];
+    return (p && p.name) || (me && uid === me.id ? me.name : '알 수 없음');
+  }
+  function keyOf(m) {
+    if (!m.to || m.to === 'all') return 'all';
+    if (m.uid === me.id) return m.to;
+    if (m.to === me.id) return m.uid;
+    return null;
+  }
+  function viewingMain() { return wide.matches || shell.dataset.view === 'chat'; }
+  function api(path, body) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) { var e = new Error(j.error || 'error'); e.status = r.status; e.code = j.error; throw e; }
+        return j;
+      });
+    });
+  }
+  function getJson(path) {
+    return fetch(path, { cache: 'no-store' }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) { var e = new Error(j.error || 'error'); e.status = r.status; throw e; }
+        return j;
+      });
+    });
+  }
+
+  function mkAvatar(uid, small) {
+    if (uid === 'all') { var g = document.createElement('div'); g.className = 'avatar group' + (small ? ' sm' : ''); g.innerHTML = GROUP_SVG; return g; }
+    var im = document.createElement('img'); im.className = 'avatar' + (small ? ' sm' : ''); im.alt = '';
+    im.src = avatarData(nameOf(uid), uid);
+    return im;
+  }
+
+  /* ---------- 대화 목록 ---------- */
+  function buildThreads() {
+    var visible = viewingMain(), map = {};
+    function get(k) { return map[k] || (map[k] = { key: k, last: null, unread: 0 }); }
+    get('all');
+    pending.forEach(function (id) { get(id); });
+    msgs.forEach(function (m) {
+      var k = keyOf(m); if (!k) return;
+      var t = get(k); t.last = m;
+      if (m.uid !== me.id && m.ts > (seen[k] || 0) && !(k === cur && visible)) t.unread++;
+    });
+    if (visible) {
+      var mx = 0; msgs.forEach(function (m) { if (keyOf(m) === cur && m.ts > mx) mx = m.ts; });
+      if (mx > (seen[cur] || 0)) { seen[cur] = mx; saveSeen(); }
+    }
+    var dms = Object.keys(map).filter(function (k) { return k !== 'all'; }).map(function (k) { return map[k]; });
+    dms.sort(function (a, b) { return (b.last ? b.last.ts : Infinity) - (a.last ? a.last.ts : Infinity); });
+    threads = [map.all].concat(dms);
+  }
+
+  function threadButton(key, last, unread, sub) {
+    var b = document.createElement('button'); b.type = 'button'; b.className = 'thread'; b.dataset.key = key;
+    if (key === cur) b.setAttribute('aria-current', 'true');
+    b.appendChild(mkAvatar(key, false));
+    var body = document.createElement('div'); body.className = 't-body';
+    var n = document.createElement('div'); n.className = 't-name'; n.textContent = nameOf(key); body.appendChild(n);
+    var pv = document.createElement('div'); pv.className = 't-prev';
+    if (last) pv.textContent = (last.uid === me.id ? '나: ' : '') + (last.img ? (last.text ? '사진 · ' + last.text : '사진') : last.text);
+    else pv.textContent = sub || (key === 'all' ? '모두에게 보내는 대화' : '새 대화를 시작해 보세요');
+    body.appendChild(pv); b.appendChild(body);
+    var end = document.createElement('div'); end.className = 't-end';
+    if (last) {
+      var tm = document.createElement('span'); tm.className = 't-time';
+      tm.textContent = dayKey(last.ts) === dayKey(Date.now()) ? timeFmt.format(new Date(last.ts)) : shortFmt.format(new Date(last.ts));
+      end.appendChild(tm);
+    }
+    if (unread > 0) { var bd = document.createElement('span'); bd.className = 'badge'; bd.textContent = unread > 99 ? '99+' : String(unread); end.appendChild(bd); }
+    b.appendChild(end);
+    return b;
+  }
+
+  function renderSide() {
+    var frag = document.createDocumentFragment(), inThreads = {};
+    threads.forEach(function (t, i) {
+      inThreads[t.key] = true;
+      if (i === 1) { var h2 = document.createElement('div'); h2.className = 'sec'; h2.textContent = '1:1 대화'; frag.appendChild(h2); }
+      frag.appendChild(threadButton(t.key, t.last, t.unread));
+    });
+    var others = users.filter(function (u) { return u.id !== me.id && !inThreads[u.id]; });
+    if (others.length) {
+      var h = document.createElement('div'); h.className = 'sec'; h.textContent = '참여자 · 이름을 눌러 1:1 대화'; frag.appendChild(h);
+      others.forEach(function (u) { frag.appendChild(threadButton(u.id, null, 0, u.online ? '접속 중' : '접속 안 함')); });
+    } else if (threads.length === 1) {
+      var hint = document.createElement('p'); hint.className = 'find-hint';
+      hint.textContent = '아직 다른 참여자가 없어요. 이 주소를 상대에게 보내 보세요.';
+      frag.appendChild(hint);
+    }
+    threadsEl.replaceChildren(frag);
+  }
+
+  /* ---------- 대화 화면 ---------- */
+  function renderTop() {
+    topAvatar.replaceChildren(mkAvatar(cur, true));
+    topTitle.textContent = cur === 'all' ? '전체방' : nameOf(cur);
+    routeEl.replaceChildren();
+    if (cur === 'all') { routeEl.textContent = '방에 들어온 모두에게 보내요'; }
+    else {
+      routeEl.appendChild(document.createTextNode('보내는 사람 '));
+      var a = document.createElement('b'); a.textContent = me.name; routeEl.appendChild(a);
+      routeEl.appendChild(document.createTextNode(' → 받는 사람 '));
+      var b = document.createElement('b'); b.textContent = nameOf(cur); routeEl.appendChild(b);
+    }
+    inputEl.placeholder = cur === 'all' ? '전체방에 메시지 보내기' : nameOf(cur) + '님에게 보내기';
+  }
+
+  function renderMain() {
+    renderTop();
+    var wasBottom = nearBottom();
+    var list = msgs.filter(function (m) { return keyOf(m) === cur; });
+    var frag = document.createDocumentFragment();
+    if (!list.length) {
+      var em = document.createElement('div'); em.className = 'empty';
+      var s = document.createElement('strong'); s.textContent = cur === 'all' ? '아직 조용하네요' : nameOf(cur) + '님과의 첫 대화';
+      em.appendChild(s); em.appendChild(document.createTextNode('첫 메시지를 보내거나 사진을 올려 보세요.'));
+      frag.appendChild(em);
+    }
+    for (var i = 0; i < list.length; i++) {
+      var m = list[i], prev = list[i - 1], next = list[i + 1];
+      var newDay = !prev || dayKey(prev.ts) !== dayKey(m.ts);
+      if (newDay) { var dv = document.createElement('div'); dv.className = 'day'; dv.textContent = dayFmt.format(new Date(m.ts)); frag.appendChild(dv); }
+      var mine = m.uid === me.id;
+      var starts = newDay || prev.uid !== m.uid || (m.ts - prev.ts) > 300000;
+      var ends = !next || next.uid !== m.uid || dayKey(next.ts) !== dayKey(m.ts) || (next.ts - m.ts) > 300000;
+      var row = document.createElement('div');
+      row.className = 'row' + (mine ? ' mine' : '') + (starts && !newDay && i > 0 ? ' gap-top' : '');
+      var canOpenDm = cur === 'all' && !mine;
+      if (!mine) {
+        if (starts) { var av = mkAvatar(m.uid, true); if (canOpenDm) { av.dataset.dm = m.uid; av.title = '1:1 대화 시작'; } row.appendChild(av); }
+        else { var slot = document.createElement('span'); slot.className = 'avatar-slot'; row.appendChild(slot); }
+      }
+      var colEl = document.createElement('div'); colEl.className = 'col';
+      if (!mine && starts) {
+        var who = document.createElement('div'); who.className = 'who' + (canOpenDm ? ' tap' : ''); who.textContent = nameOf(m.uid);
+        if (canOpenDm) { who.dataset.dm = m.uid; who.title = '1:1 대화 시작'; }
+        colEl.appendChild(who);
+      }
+      var line = document.createElement('div'); line.className = 'bubble-line';
+      var b = document.createElement('div'); b.className = 'bubble';
+      if (m.img) {
+        b.className += ' photo';
+        var im = document.createElement('img'); im.className = 'pic'; im.alt = '보낸 사진'; im.src = m.img;
+        if (m.w && m.h) { im.width = m.w; im.height = m.h; im.style.aspectRatio = m.w + ' / ' + m.h; }
+        im.dataset.zoom = '1'; b.appendChild(im);
+        if (m.text) { var cp = document.createElement('div'); cp.className = 'cap'; cp.textContent = m.text; b.appendChild(cp); }
+      } else { b.textContent = m.text; }
+      line.appendChild(b);
+      if (ends || mine) {
+        var meta = document.createElement('div'); meta.className = 'meta';
+        if (ends) { var t = document.createElement('time'); t.textContent = timeFmt.format(new Date(m.ts)); meta.appendChild(t); }
+        if (mine) {
+          var d = document.createElement('button'); d.type = 'button'; d.className = 'del' + (armedId === m.id ? ' armed' : '');
+          d.textContent = armedId === m.id ? '정말 삭제' : '삭제'; d.dataset.id = m.id; meta.appendChild(d);
+        }
+        line.appendChild(meta);
+      }
+      colEl.appendChild(line); row.appendChild(colEl); frag.appendChild(row);
+    }
+    listEl.replaceChildren(frag);
+    var last = list[list.length - 1], key = cur + ':' + (last ? last.id : '');
+    var switched = lastKey.split(':')[0] !== cur;
+    var isNew = !switched && key !== lastKey;
+    lastKey = key;
+    if (forceBottom || switched || wasBottom || (last && last.uid === me.id && isNew)) { toBottom(); forceBottom = false; }
+    else if (isNew) { jumpEl.hidden = false; }
+    clearMineBtn.hidden = !list.some(function (m) { return m.uid === me.id; });
+  }
+
+  function render() {
+    if (!me) return;
+    profs = {};
+    users.forEach(function (u) { profs[u.id] = u; });
+    buildThreads(); renderSide(); renderMain();
+    var on = users.filter(function (u) { return u.online; }).length;
+    setStatus('접속 중 · 지금 ' + on + '명 · 전체 ' + users.length + '명', true);
+  }
+
+  function updateComposer() { sendBtn.disabled = !inputEl.value.trim() && !staged; }
+  function autosize() { inputEl.style.height = '42px'; inputEl.style.height = Math.min(inputEl.scrollHeight + 2, 140) + 'px'; }
+
+  /* ---------- 이동 ---------- */
+  function openThread(key) {
+    cur = key; lastKey = ''; forceBottom = true;
+    if (key !== 'all' && pending.indexOf(key) < 0 && !msgs.some(function (m) { return keyOf(m) === key; })) pending.push(key);
+    shell.dataset.view = 'chat'; mineArmed = false; clearMineBtn.classList.remove('armed'); clearMineBtn.textContent = '내 메시지 지우기';
+    render();
+    if (wide.matches) inputEl.focus();
+  }
+  threadsEl.addEventListener('click', function (ev) { var b = ev.target.closest && ev.target.closest('.thread'); if (b) openThread(b.dataset.key); });
+  $('#back').addEventListener('click', function () { shell.dataset.view = 'list'; render(); });
+  if (wide.addEventListener) wide.addEventListener('change', render);
+
+  /* ---------- 보내기·지우기 ---------- */
+  async function send() {
+    var text = inputEl.value.trim();
+    if (!text && !staged) return;
+    var body = { secret: me.secret, to: cur, text: text };
+    if (staged) { body.img = staged.data; body.w = staged.w; body.h = staged.h; }
+    var backupText = inputEl.value, backupStage = staged;
+    inputEl.value = ''; clearStage(); autosize(); updateComposer(); forceBottom = true;
+    try {
+      var r = await api('/api/send', body);
+      if (r.message && !msgs.some(function (m) { return m.id === r.message.id; })) { msgs.push(r.message); render(); }
+    } catch (e) {
+      inputEl.value = backupText; if (backupStage) setStage(backupStage); autosize(); updateComposer(); forceBottom = false;
+      toast(e.status === 429 ? '너무 빨리 보내고 있어요. 잠시 뒤에 다시 보내 주세요.' : e.status === 401 ? '다시 입장해 주세요.' : '보내지 못했어요. 연결을 확인해 주세요.');
+      if (e.status === 401) { ls('suda-secret', null); location.reload(); }
+    }
+    inputEl.focus();
+  }
+  async function removeMsg(id) {
+    armedId = null; clearTimeout(armTimer);
+    try { await api('/api/delete', { secret: me.secret, id: id }); msgs = msgs.filter(function (m) { return m.id !== id; }); render(); }
+    catch (e) { toast('삭제하지 못했어요.'); render(); }
+  }
+  listEl.addEventListener('click', function (ev) {
+    var t = ev.target;
+    var dm = t.closest && t.closest('[data-dm]'); if (dm) { openThread(dm.dataset.dm); return; }
+    if (t.dataset && t.dataset.zoom) { lightImg.src = t.src; lightEl.hidden = false; return; }
+    var btn = t.closest && t.closest('.del'); if (!btn) return;
+    var id = btn.dataset.id;
+    if (armedId === id) { removeMsg(id); return; }
+    armedId = id; clearTimeout(armTimer);
+    armTimer = setTimeout(function () { armedId = null; renderMain(); }, 3000);
+    renderMain();
+  });
+
+  clearMineBtn.addEventListener('click', async function () {
+    if (!mineArmed) {
+      mineArmed = true; clearMineBtn.classList.add('armed'); clearMineBtn.textContent = '정말 지우기';
+      mineTimer = setTimeout(function () { mineArmed = false; clearMineBtn.classList.remove('armed'); clearMineBtn.textContent = '내 메시지 지우기'; }, 4000);
+      return;
+    }
+    clearTimeout(mineTimer); mineArmed = false; clearMineBtn.classList.remove('armed'); clearMineBtn.textContent = '내 메시지 지우기';
+    try {
+      var r = await api('/api/clear-mine', { secret: me.secret, to: cur });
+      var gone = {}; (r.ids || []).forEach(function (id) { gone[id] = 1; });
+      msgs = msgs.filter(function (m) { return !gone[m.id]; }); render();
+      toast('내가 보낸 메시지를 지웠어요.');
+    } catch (e) { toast('지우지 못했어요. 다시 눌러 주세요.'); }
+  });
+  function disarmClear() { clearArmed = false; clearAllBtn.classList.remove('armed'); clearAllBtn.textContent = '전체 삭제'; }
+  clearAllBtn.addEventListener('click', async function () {
+    if (!clearArmed) {
+      clearArmed = true; clearAllBtn.classList.add('armed'); clearAllBtn.textContent = '정말 전부 삭제';
+      clearTimer = setTimeout(disarmClear, 4000); return;
+    }
+    clearTimeout(clearTimer); clearAllBtn.disabled = true; clearAllBtn.textContent = '지우는 중…';
+    try { await api('/api/admin/clear', { key: adminKey }); msgs = []; render(); toast('모든 대화를 지웠어요.'); }
+    catch (e) { if (e.status === 403) { ls('suda-admin', null); adminKey = ''; clearAllBtn.hidden = true; toast('관리자 키가 맞지 않아요.'); } else toast('지우지 못했어요.'); }
+    clearAllBtn.disabled = false; disarmClear();
+  });
+
+  /* ---------- 사진 ---------- */
+  function loadImage(file) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(file), im = new Image();
+      im.onload = function () { URL.revokeObjectURL(url); res(im); };
+      im.onerror = function () { URL.revokeObjectURL(url); rej(new Error('bad image')); };
+      im.src = url;
+    });
+  }
+  async function compress(file) {
+    var im = await loadImage(file), max = 1200, q = 0.78, out = null, w, h;
+    for (var round = 0; round < 9; round++) {
+      var sc = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+      w = Math.max(1, Math.round(im.naturalWidth * sc)); h = Math.max(1, Math.round(im.naturalHeight * sc));
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(im, 0, 0, w, h);
+      out = c.toDataURL('image/jpeg', q);
+      if (out.length <= 240000) break;
+      if (q > 0.5) q -= 0.08; else { max = Math.round(max * 0.8); q = 0.65; }
+    }
+    if (out.length > 290000) throw new Error('too big');
+    return { data: out, w: w, h: h, kb: Math.round(out.length * 0.75 / 1024) };
+  }
+  function setStage(s) {
+    staged = s; stageImg.src = s.data; stageEl.hidden = false; stageInfo.replaceChildren();
+    var b = document.createElement('b'); b.textContent = '사진 1장'; stageInfo.appendChild(b);
+    stageInfo.appendChild(document.createTextNode(' · 약 ' + s.kb + 'KB로 줄였어요'));
+    updateComposer();
+  }
+  function clearStage() { staged = null; stageEl.hidden = true; stageImg.removeAttribute('src'); fileEl.value = ''; updateComposer(); }
+  attachBtn.addEventListener('click', function () { fileEl.click(); });
+  fileEl.addEventListener('change', async function () {
+    var f = fileEl.files && fileEl.files[0]; if (!f) return;
+    if (!/^image\//.test(f.type)) { toast('사진 파일만 보낼 수 있어요.'); fileEl.value = ''; return; }
+    try { setStage(await compress(f)); } catch (e) { toast('이 사진은 줄이지 못했어요. 다른 사진을 골라 주세요.'); fileEl.value = ''; }
+  });
+  $('#stageRemove').addEventListener('click', clearStage);
+  lightEl.addEventListener('click', function () { lightEl.hidden = true; lightImg.removeAttribute('src'); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !lightEl.hidden) lightEl.click(); });
+
+  inputEl.addEventListener('input', function () { autosize(); updateComposer(); });
+  inputEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && e.keyCode !== 229) { e.preventDefault(); send(); }
+  });
+  sendBtn.addEventListener('click', send);
+  jumpEl.addEventListener('click', toBottom);
+  listEl.addEventListener('scroll', function () { if (nearBottom()) jumpEl.hidden = true; });
+
+  /* ---------- 실시간 연결 ---------- */
+  function connect() {
+    if (es) es.close();
+    es = new EventSource('/events?secret=' + encodeURIComponent(me.secret));
+    es.addEventListener('open', function () {
+      if (everOpened) { refresh(); }
+      everOpened = true;
+    });
+    es.addEventListener('users', function (e) { users = JSON.parse(e.data); render(); });
+    es.addEventListener('msg', function (e) {
+      var m = JSON.parse(e.data);
+      if (!msgs.some(function (x) { return x.id === m.id; })) { msgs.push(m); render(); }
+    });
+    es.addEventListener('del', function (e) {
+      var gone = {}; (JSON.parse(e.data).ids || []).forEach(function (id) { gone[id] = 1; });
+      msgs = msgs.filter(function (m) { return !gone[m.id]; }); render();
+    });
+    es.addEventListener('reset', function () { msgs = []; render(); });
+    es.onerror = function () { setStatus('다시 연결하는 중…', false); };
+  }
+  async function refresh() {
+    try { var st = await getJson('/api/state?secret=' + encodeURIComponent(me.secret)); users = st.users; msgs = st.messages; render(); } catch (e) {}
+  }
+
+  /* ---------- 입장 ---------- */
+  function showJoin(msg) {
+    joinEl.hidden = false; codeWrap.hidden = !needsCode;
+    nameEl.value = ls('suda-name') || '';
+    if (msg) { joinErr.textContent = msg; joinErr.hidden = false; } else joinErr.hidden = true;
+    setTimeout(function () { nameEl.focus(); }, 50);
+  }
+  async function start(secret) {
+    var st = await getJson('/api/state?secret=' + encodeURIComponent(secret));
+    me = { id: st.me.id, name: st.me.name, secret: secret };
+    users = st.users; msgs = st.messages;
+    joinEl.hidden = true; updateComposer(); autosize(); connect(); render();
+  }
+  joinForm.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    var name = nameEl.value.trim(); if (!name) return;
+    joinBtn.disabled = true; joinErr.hidden = true;
+    try {
+      var r = await api('/api/join', { name: name, code: codeEl.value.trim() });
+      ls('suda-secret', r.secret); ls('suda-name', r.name);
+      await start(r.secret);
+    } catch (err) {
+      joinErr.hidden = false;
+      joinErr.textContent = err.code === 'code' ? '초대 코드가 맞지 않아요.' : err.code === 'full' ? '정원이 가득 찼어요.' : '입장하지 못했어요. 잠시 뒤에 다시 해 주세요.';
+    }
+    joinBtn.disabled = false;
+  });
+
+  async function boot() {
+    try { var p = new URLSearchParams(location.search); if (p.get('admin')) { ls('suda-admin', p.get('admin')); history.replaceState(null, '', location.pathname); } } catch (e) {}
+    adminKey = ls('suda-admin'); clearAllBtn.hidden = !adminKey;
+    try { needsCode = !!(await getJson('/api/config')).needsCode; } catch (e) {}
+    var secret = ls('suda-secret');
+    if (secret) {
+      try { await start(secret); return; }
+      catch (e) { if (e.status === 401) { ls('suda-secret', null); } else { setStatus('서버에 연결하지 못했어요.', false); showJoin('서버에 연결하지 못했어요. 새로고침해 주세요.'); return; } }
+    }
+    showJoin();
+  }
+  updateComposer();
+  boot();
+})();
+</script>
+
+</body>
+</html>
